@@ -1,0 +1,19 @@
+{
+  "timestamp": "2025-11-11T19:41:51.200907",
+  "environment": "dev",
+  "total_violations": 2,
+  "violations": [
+    {
+      "control": "CIS-AWS-5",
+      "resource": "test-non-compliant-e571dcc5",
+      "severity": "CRITICAL",
+      "message": "S3 bucket test-non-compliant-e571dcc5 allows public access"
+    },
+    {
+      "control": "CIS-AWS-5",
+      "resource": "test-non-compliant-eead349a",
+      "severity": "CRITICAL",
+      "message": "S3 bucket test-non-compliant-eead349a allows public access"
+    }
+  ]
+}

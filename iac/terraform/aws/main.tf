@@ -1,24 +1,38 @@
-provider "aws" {
-  region = "us-east-1"
-}
+# AWS Compliance-as-Code Terraform Configuration
+# Tạo infrastructure để demo CIS Benchmark compliance
 
-resource "aws_s3_bucket" "example" {
-  bucket = "my-compliance-test-bucket"
-  acl    = "public-read"
-}
+terraform {
+  required_version = ">= 1.0"
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
-  bucket = aws_s3_bucket.example.bucket
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0.0"
     }
   }
 }
 
-resource "aws_cloudtrail" "example" {
-  name                          = "example-trail"
-  s3_bucket_name                = "my-compliance-test-bucket"
-  is_multi_region_trail         = true
-  enable_log_file_validation    = true
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = "AWS-Compliance"
+      ManagedBy   = "Terraform"
+      Environment = var.environment
+    }
+  }
+}
+
+# Random suffix để tránh trùng tên
+resource "random_id" "suffix" {
+  byte_length = 4
+}
+
+locals {
+  name_prefix = "compliance-${var.environment}"
+  common_tags = {
+    Project     = "AWS-Compliance"
+    Environment = var.environment
+  }
 }

@@ -1,0 +1,101 @@
+# AWS Compliance-as-Code Configuration
+# 10 CIS AWS Benchmark Controls
+
+compliance:
+  version: "1.0"
+  framework: "CIS AWS Foundations Benchmark v1.5.0"
+
+controls:
+  - id: CIS-AWS-1
+    title: "Root Account MFA Enabled"
+    description: "Ensure MFA is enabled for the root account"
+    severity: CRITICAL
+    category: IAM
+    remediation: manual
+    evidence_required: true
+
+  - id: CIS-AWS-2
+    title: "No Root Access Keys"
+    description: "Ensure no root account access keys exist"
+    severity: CRITICAL
+    category: IAM
+    remediation: manual
+    evidence_required: true
+
+  - id: CIS-AWS-3
+    title: "CloudTrail Enabled All Regions"
+    description: "Ensure CloudTrail is enabled in all regions"
+    severity: HIGH
+    category: Logging
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-4
+    title: "CloudTrail Log Validation"
+    description: "Ensure CloudTrail log file validation is enabled"
+    severity: HIGH
+    category: Logging
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-5
+    title: "S3 Buckets Not Public"
+    description: "Ensure S3 buckets are not publicly accessible"
+    severity: CRITICAL
+    category: Storage
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-6
+    title: "S3 Encryption Enabled"
+    description: "Ensure S3 bucket encryption is enabled"
+    severity: HIGH
+    category: Storage
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-7
+    title: "No SSH from Internet"
+    description: "Ensure SSH (port 22) is not open to 0.0.0.0/0"
+    severity: CRITICAL
+    category: Network
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-8
+    title: "No RDP from Internet"
+    description: "Ensure RDP (port 3389) is not open to 0.0.0.0/0"
+    severity: CRITICAL
+    category: Network
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-9
+    title: "Default Security Group Restricted"
+    description: "Ensure default security group restricts all traffic"
+    severity: HIGH
+    category: Network
+    remediation: auto
+    evidence_required: true
+
+  - id: CIS-AWS-10
+    title: "VPC Flow Logs Enabled"
+    description: "Ensure VPC flow logging is enabled"
+    severity: MEDIUM
+    category: Network
+    remediation: auto
+    evidence_required: true
+
+aws:
+  region: us-east-1
+  evidence_bucket: compliance-evidence-bucket
+  scan_schedule: "rate(1 hour)"
+
+notification:
+  enabled: true
+  sns_topic: compliance-alerts
+  email: security@example.com
+
+dashboard:
+  port: 5050
+  host: 0.0.0.0
