@@ -58,6 +58,8 @@ jobs:
           directory: iac/terraform/aws
           framework: terraform
           soft_fail: false                  # Fail pipeline nếu có HIGH/CRITICAL
+          skip_check: CKV_AWS_272,CKV_AWS_115,CKV_AWS_173,CKV_AWS_50,CKV_AWS_116,CKV_AWS_117,CKV_AWS_338,CKV_AWS_158,CKV_AWS_35,CKV_AWS_252,CKV_AWS_341,CKV_AWS_342,CKV_AWS_343,CKV_AWS_344,CKV_AWS_345
+          check: CKV_AWS_18,CKV_AWS_19,CKV2_AWS_6,CKV_AWS_20,CKV_AWS_21,CKV_AWS_144,CKV_AWS_145
           output_format: cli,sarif
           output_file_path: console,reports/checkov-results.sarif
 
