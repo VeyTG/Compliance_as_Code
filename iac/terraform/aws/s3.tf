@@ -1,10 +1,56 @@
 # S3 Buckets Configuration
 # Bao gồm cả compliant và non-compliant examples để demo
 
+# ===== DATA SOURCES (cần cho KMS policy và account ID) =====
+data "aws_caller_identity" "current" {}
+
+# ===== KMS KEY CHÍNH CHO REGION PRIMARY (SSE-KMS) =====
+resource "aws_kms_key" "s3_kms" {
+  description             = "KMS key for primary S3 buckets encryption"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudTrail to use the key"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "S3 Primary KMS Key"
+  })
+}
+
+resource "aws_kms_alias" "s3_kms_alias" {
+  name          = "alias/compliance-s3-kms-primary"
+  target_key_id = aws_kms_key.s3_kms.key_id
+}
+
 # ===== BUCKET CHUYÊN DỤNG ĐỂ LƯU ACCESS LOGS =====
 resource "aws_s3_bucket" "access_logs" {
   bucket        = "compliance-access-logs-${random_id.suffix.hex}"
-  force_destroy = true # Để dễ destroy khi test
+  force_destroy = true
 
   tags = merge(local.common_tags, {
     Name        = "S3 Access Logs Bucket"
@@ -23,7 +69,6 @@ resource "aws_s3_bucket_public_access_block" "access_logs" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
   bucket = aws_s3_bucket.access_logs.id
-
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
@@ -34,7 +79,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
 
 resource "aws_s3_bucket_versioning" "access_logs" {
   bucket = aws_s3_bucket.access_logs.id
-
   versioning_configuration {
     status = "Enabled"
   }
@@ -61,7 +105,6 @@ resource "aws_s3_bucket_public_access_block" "evidence" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
   bucket = aws_s3_bucket.evidence.id
-
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
@@ -72,13 +115,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
 
 resource "aws_s3_bucket_versioning" "evidence" {
   bucket = aws_s3_bucket.evidence.id
-
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Bật access logging cho bucket evidence (CIS-AWS-5)
 resource "aws_s3_bucket_logging" "evidence" {
   bucket        = aws_s3_bucket.evidence.id
   target_bucket = aws_s3_bucket.access_logs.id
@@ -106,7 +147,6 @@ resource "aws_s3_bucket_public_access_block" "cloudtrail" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
-
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
@@ -117,23 +157,19 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
 
 resource "aws_s3_bucket_versioning" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
-
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Bật access logging cho bucket cloudtrail
 resource "aws_s3_bucket_logging" "cloudtrail" {
   bucket        = aws_s3_bucket.cloudtrail.id
   target_bucket = aws_s3_bucket.access_logs.id
   target_prefix = "cloudtrail-logs/"
 }
 
-# CloudTrail bucket policy
 resource "aws_s3_bucket_policy" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -164,7 +200,7 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
   })
 }
 
-# ===== NON-COMPLIANT BUCKET: Test Purpose (sẽ dùng để demo violation) =====
+# ===== NON-COMPLIANT BUCKET: Test Purpose (demo violation) =====
 resource "aws_s3_bucket" "test_non_compliant" {
   bucket = "test-non-compliant-${random_id.suffix.hex}"
 
@@ -175,19 +211,16 @@ resource "aws_s3_bucket" "test_non_compliant" {
   })
 }
 
-# Để demo violation: bạn có thể tạm đổi các giá trị này thành false
 resource "aws_s3_bucket_public_access_block" "test_non_compliant" {
   bucket                  = aws_s3_bucket.test_non_compliant.id
-  block_public_acls       = false # ← Đổi thành false để demo public access violation
+  block_public_acls       = true # ← Giữ true để compliant, đổi false để demo violation
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
-# Thêm encryption để CKV_AWS_19 PASS (nếu muốn compliant hoàn toàn)
 resource "aws_s3_bucket_server_side_encryption_configuration" "test_non_compliant" {
   bucket = aws_s3_bucket.test_non_compliant.id
-
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
@@ -196,39 +229,38 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "test_non_complian
   }
 }
 
-# Thêm versioning
 resource "aws_s3_bucket_versioning" "test_non_compliant" {
   bucket = aws_s3_bucket.test_non_compliant.id
-
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Bật access logging cho bucket test_non_compliant
 resource "aws_s3_bucket_logging" "test_non_compliant" {
   bucket        = aws_s3_bucket.test_non_compliant.id
   target_bucket = aws_s3_bucket.access_logs.id
   target_prefix = "test-non-compliant-logs/"
 }
 
-# Thêm KMS Key cho encryption (SSE-KMS thay vì AES256)
-resource "aws_kms_key" "s3_kms" {
-  description         = "KMS key for S3 encryption - Compliance"
+# ===== CROSS-REGION REPLICATION FOR CLOUDTRAIL BUCKET (CIS-AWS-3) =====
+provider "aws" {
+  alias  = "replica"
+  region = "us-west-2"
+}
+
+# KMS Key riêng cho replica region
+resource "aws_kms_key" "s3_kms_replica" {
+  provider            = aws.replica
+  description         = "KMS key for replica S3 bucket"
   enable_key_rotation = true
-
-  tags = merge(local.common_tags, {
-    Name = "S3 Compliance KMS Key"
-  })
 }
 
-resource "aws_kms_alias" "s3_kms" {
-  name          = "alias/s3-compliance-key"
-  target_key_id = aws_kms_key.s3_kms.key_id
+resource "aws_kms_alias" "s3_kms_replica_alias" {
+  provider      = aws.replica
+  name          = "alias/compliance-s3-kms-replica"
+  target_key_id = aws_kms_key.s3_kms_replica.key_id
 }
 
-
-# Bucket replica ở region khác (ví dụ us-west-2)
 resource "aws_s3_bucket" "cloudtrail_replica" {
   provider = aws.replica
   bucket   = "${var.cloudtrail_bucket_name}-replica-${random_id.suffix.hex}"
@@ -240,36 +272,37 @@ resource "aws_s3_bucket" "cloudtrail_replica" {
   })
 }
 
-resource "aws_s3_bucket_versioning" "cloudtrail_replica" {
-  provider = aws.replica
-  bucket   = aws_s3_bucket.cloudtrail_replica.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
+resource "aws_s3_bucket_public_access_block" "cloudtrail_replica" {
+  provider                = aws.replica
+  bucket                  = aws_s3_bucket.cloudtrail_replica.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail_replica" {
   provider = aws.replica
   bucket   = aws_s3_bucket.cloudtrail_replica.id
-
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.s3_kms.arn
+      kms_master_key_id = aws_kms_key.s3_kms_replica.arn
     }
   }
 }
 
-# Thêm provider replica (vào variables.tf hoặc main.tf)
-provider "aws" {
-  alias  = "replica"
-  region = "us-west-2" # Region khác
+resource "aws_s3_bucket_versioning" "cloudtrail_replica" {
+  provider = aws.replica
+  bucket   = aws_s3_bucket.cloudtrail_replica.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
-# IAM Role cho S3 Replication
+# IAM Role cho Replication
 resource "aws_iam_role" "replication_role" {
-  name = "s3-replication-role-compliance"
+  name = "compliance-s3-replication-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -298,9 +331,7 @@ resource "aws_iam_role_policy" "replication_policy" {
           "s3:GetReplicationConfiguration",
           "s3:ListBucket"
         ]
-        Resource = [
-          aws_s3_bucket.cloudtrail.arn
-        ]
+        Resource = [aws_s3_bucket.cloudtrail.arn]
       },
       {
         Effect = "Allow"
@@ -312,9 +343,7 @@ resource "aws_iam_role_policy" "replication_policy" {
           "s3:ReplicateDelete",
           "s3:ReplicateTags"
         ]
-        Resource = [
-          "${aws_s3_bucket.cloudtrail.arn}/*"
-        ]
+        Resource = ["${aws_s3_bucket.cloudtrail.arn}/*"]
       },
       {
         Effect = "Allow"
@@ -323,15 +352,24 @@ resource "aws_iam_role_policy" "replication_policy" {
           "s3:PutObjectAcl",
           "s3:PutObjectTagging"
         ]
-        Resource = [
-          "${aws_s3_bucket.cloudtrail_replica.arn}/*"
+        Resource = ["${aws_s3_bucket.cloudtrail_replica.arn}/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
         ]
+        Resource = aws_kms_key.s3_kms_replica.arn
       }
     ]
   })
 }
 
-# Bật replication
+# Replication Configuration
 resource "aws_s3_bucket_replication_configuration" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
   role   = aws_iam_role.replication_role.arn
@@ -350,7 +388,7 @@ resource "aws_s3_bucket_replication_configuration" "cloudtrail" {
       }
 
       encryption_configuration {
-        replica_kms_key_id = aws_kms_key.s3_kms.arn
+        replica_kms_key_id = aws_kms_key.s3_kms_replica.arn
       }
     }
 
