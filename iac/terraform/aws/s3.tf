@@ -214,8 +214,8 @@ resource "aws_s3_bucket_logging" "test_non_compliant" {
 
 # Thêm KMS Key cho encryption (SSE-KMS thay vì AES256)
 resource "aws_kms_key" "s3_kms" {
-  description             = "KMS key for S3 encryption - Compliance"
-  enable_key_rotation     = true
+  description         = "KMS key for S3 encryption - Compliance"
+  enable_key_rotation = true
 
   tags = merge(local.common_tags, {
     Name = "S3 Compliance KMS Key"
@@ -227,32 +227,143 @@ resource "aws_kms_alias" "s3_kms" {
   target_key_id = aws_kms_key.s3_kms.key_id
 }
 
-# Bật Cross-Region Replication cho bucket cloudtrail (CIS-AWS-3)
-resource "aws_s3_bucket_replication_configuration" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
-  role   = aws_iam_role.replication_role.arn  # Bạn cần tạo role này (mình hướng dẫn dưới)
-
-  rule {
-    id     = "cloudtrail-replication"
-    status = "Enabled"
-
-    destination {
-      bucket        = aws_s3_bucket.cloudtrail_replica.arn  # Bucket replica ở region khác
-      storage_class = "STANDARD"
-    }
-
-    filter {}
-  }
-}
 
 # Bucket replica ở region khác (ví dụ us-west-2)
 resource "aws_s3_bucket" "cloudtrail_replica" {
-  provider = aws.replica  # Cần thêm provider alias
+  provider = aws.replica
   bucket   = "${var.cloudtrail_bucket_name}-replica-${random_id.suffix.hex}"
+
+  tags = merge(local.common_tags, {
+    Name        = "CloudTrail Logs Bucket Replica"
+    Compliance  = "CIS-AWS-3"
+    Description = "Replica của CloudTrail logs bucket"
+  })
+}
+
+resource "aws_s3_bucket_versioning" "cloudtrail_replica" {
+  provider = aws.replica
+  bucket   = aws_s3_bucket.cloudtrail_replica.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail_replica" {
+  provider = aws.replica
+  bucket   = aws_s3_bucket.cloudtrail_replica.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_kms.arn
+    }
+  }
 }
 
 # Thêm provider replica (vào variables.tf hoặc main.tf)
 provider "aws" {
   alias  = "replica"
-  region = "us-west-2"  # Region khác
+  region = "us-west-2" # Region khác
+}
+
+# IAM Role cho S3 Replication
+resource "aws_iam_role" "replication_role" {
+  name = "s3-replication-role-compliance"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "s3.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "replication_policy" {
+  name = "compliance-s3-replication-policy"
+  role = aws_iam_role.replication_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetReplicationConfiguration",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.cloudtrail.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObjectVersionForReplication",
+          "s3:GetObjectVersionAcl",
+          "s3:GetObjectVersionTagging",
+          "s3:ReplicateObject",
+          "s3:ReplicateDelete",
+          "s3:ReplicateTags"
+        ]
+        Resource = [
+          "${aws_s3_bucket.cloudtrail.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl",
+          "s3:PutObjectTagging"
+        ]
+        Resource = [
+          "${aws_s3_bucket.cloudtrail_replica.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Bật replication
+resource "aws_s3_bucket_replication_configuration" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+  role   = aws_iam_role.replication_role.arn
+
+  rule {
+    id       = "cloudtrail-full-replication"
+    status   = "Enabled"
+    priority = 1
+
+    destination {
+      bucket        = aws_s3_bucket.cloudtrail_replica.arn
+      storage_class = "STANDARD"
+
+      access_control_translation {
+        owner = "Destination"
+      }
+
+      encryption_configuration {
+        replica_kms_key_id = aws_kms_key.s3_kms.arn
+      }
+    }
+
+    source_selection_criteria {
+      sse_kms_encrypted_objects {
+        status = "Enabled"
+      }
+    }
+
+    filter {
+      prefix = ""
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.cloudtrail]
 }
