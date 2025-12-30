@@ -130,10 +130,10 @@ resource "aws_s3_bucket" "test_non_compliant" {
 resource "aws_s3_bucket_public_access_block" "test_non_compliant" {
   bucket = aws_s3_bucket.test_non_compliant.id
 
-  block_public_acls       = false # ❌ Vi phạm!
-  block_public_policy     = false # ❌ Vi phạm!
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_acls       = true # ❌ Vi phạm!
+  block_public_policy     = true # ❌ Vi phạm!
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 # ❌ VIOLATION CIS-AWS-6: No encryption
