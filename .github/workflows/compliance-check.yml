@@ -52,6 +52,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Create reports folder
+        run: mkdir -p ../../reports
+
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@master
         with:
@@ -98,6 +101,9 @@ jobs:
           terraform plan -out=tfplan || echo "Plan failed, continue for OPA"
           terraform show -json tfplan > tfplan.json 2>/dev/null || echo "{}" > tfplan.json
         continue-on-error: true
+
+      - name: Create reports folder
+      run: mkdir -p ../../reports
 
       - name: Run OPA Evaluation
         run: |
