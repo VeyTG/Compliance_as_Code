@@ -26,7 +26,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_kms.arn
     }
   }
 }
@@ -63,7 +64,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_kms.arn
     }
   }
 }
@@ -107,7 +109,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_kms.arn
     }
   }
 }
@@ -187,7 +190,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "test_non_complian
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_kms.arn
     }
   }
 }
@@ -206,4 +210,49 @@ resource "aws_s3_bucket_logging" "test_non_compliant" {
   bucket        = aws_s3_bucket.test_non_compliant.id
   target_bucket = aws_s3_bucket.access_logs.id
   target_prefix = "test-non-compliant-logs/"
+}
+
+# Thêm KMS Key cho encryption (SSE-KMS thay vì AES256)
+resource "aws_kms_key" "s3_kms" {
+  description             = "KMS key for S3 encryption - Compliance"
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, {
+    Name = "S3 Compliance KMS Key"
+  })
+}
+
+resource "aws_kms_alias" "s3_kms" {
+  name          = "alias/s3-compliance-key"
+  target_key_id = aws_kms_key.s3_kms.key_id
+}
+
+# Bật Cross-Region Replication cho bucket cloudtrail (CIS-AWS-3)
+resource "aws_s3_bucket_replication_configuration" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+  role   = aws_iam_role.replication_role.arn  # Bạn cần tạo role này (mình hướng dẫn dưới)
+
+  rule {
+    id     = "cloudtrail-replication"
+    status = "Enabled"
+
+    destination {
+      bucket        = aws_s3_bucket.cloudtrail_replica.arn  # Bucket replica ở region khác
+      storage_class = "STANDARD"
+    }
+
+    filter {}
+  }
+}
+
+# Bucket replica ở region khác (ví dụ us-west-2)
+resource "aws_s3_bucket" "cloudtrail_replica" {
+  provider = aws.replica  # Cần thêm provider alias
+  bucket   = "${var.cloudtrail_bucket_name}-replica-${random_id.suffix.hex}"
+}
+
+# Thêm provider replica (vào variables.tf hoặc main.tf)
+provider "aws" {
+  alias  = "replica"
+  region = "us-west-2"  # Region khác
 }
