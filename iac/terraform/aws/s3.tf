@@ -175,7 +175,7 @@ resource "aws_s3_bucket" "test_non_compliant" {
 # Để demo violation: bạn có thể tạm đổi các giá trị này thành false
 resource "aws_s3_bucket_public_access_block" "test_non_compliant" {
   bucket                  = aws_s3_bucket.test_non_compliant.id
-  block_public_acls       = true   # ← Đổi thành false để demo public access violation
+  block_public_acls       = false   # ← Đổi thành false để demo public access violation
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
